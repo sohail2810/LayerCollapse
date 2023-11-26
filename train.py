@@ -1,27 +1,13 @@
-import copy
-import math
+import argparse
+import pickle
 import random
-import time
-from collections import OrderedDict, defaultdict
-from typing import Union, List
+import numpy as np
+
+from torch.optim import *
+
 from utils import *
 
-import numpy as np
-import torch
-import torch.nn as nn
-from torch.optim import *
-from torch.utils.data import DataLoader
-from torchprofile import profile_macs
-from tqdm.auto import tqdm
-
-assert torch.cuda.is_available(), \
-"CUDA support is not available."
-
-import pickle
-
-import LiveTune as lt
-
-import argparse
+assert torch.cuda.is_available(), "CUDA support is not available."
 
 parser = argparse.ArgumentParser(description='PyTorch Training')
 parser.add_argument('--lr', default=0.005, type=float, help='learning rate')
@@ -53,21 +39,14 @@ parser.add_argument('--fraction', default=0.5, type=float, help='fraction')
 parser.add_argument('--patch_size', default=4, type=int, help='patch size')
 parser.add_argument('--image_size', default=32, type=int, help='image size')
 
-
 args = parser.parse_args()
-# port vit vanilla imagenet 36237
-
-
 torch.manual_seed(args.seed)
 np.random.seed(args.seed)
 random.seed(args.seed)
-
 # Set device
 device = torch.device("cuda:{}".format(args.device) if torch.cuda.is_available() else "cpu")
-
 # Set dataset
 dataloader = get_dataloader(args.dataset, args.batch_size)
-
 # Set model
 model = get_model(args.model, args.num_classes, patch_size=args.patch_size, image_size=args.image_size).to(device)
 if args.load != "":
@@ -75,20 +54,15 @@ if args.load != "":
 
 # Set optimizer
 # make lr scheduler for cifar 100 and adamw optimizer
-
 lr = lt.liveVar(args.lr, "lr")
 wd = lt.liveVar(args.wd, "wd")
 opt = SGD(model.parameters(), lr=lr(), weight_decay=wd(), momentum=0.9)
 scheduler = lr_scheduler.MultiStepLR(opt, milestones=[75, 150, 250, 350], gamma=0.3)
 
-# opt = SGD(model.parameters(), lr=lr(), momentum=0.9, weight_decay=wd())
-
 # Register live variables
 lc1 = lt.liveVar(args.lc1, "lc1")
 fraction = lt.liveVar(args.fraction, "fraction")
-
 old_lts = {"lr": lr(), "wd": wd(), "lc1": lc1()}
-
 
 # Set loss function
 criterion = nn.CrossEntropyLoss()
@@ -98,12 +72,10 @@ save_trigger = lt.liveTrigger("save")
 
 train_losses = []
 train_accs = []
-# val_losses = []
+
 val_accs = []
 train_top5_accs = []
 val_top5_accs = []
-
-
 
 # Train
 for epoch in tqdm(range(args.epochs)):
@@ -118,7 +90,8 @@ for epoch in tqdm(range(args.epochs)):
         outputs = model(inputs)
 
         # Regularized loss
-        if args.reg == "LC" and (args.model == "VGG16" or args.model == "VGG11" or args.model == "VGG13" or args.model == "VGG19"):
+        if args.reg == "LC" and (
+                args.model == "VGG16" or args.model == "VGG11" or args.model == "VGG13" or args.model == "VGG19"):
             loss = criterion(outputs, labels) + model.get_linear_loss(fraction=fraction()) * lc1()
         elif args.reg == "LC" and args.model == "mixer":
             loss = criterion(outputs, labels) + get_model_linear_loss(model, fraction=fraction()) * lc1()
@@ -153,7 +126,7 @@ for epoch in tqdm(range(args.epochs)):
     val_accs.append(evaluate(model, dataloader["val"], device=device))
 
     # Save
-    if save_trigger() or epoch%10 == 1:
+    if save_trigger() or epoch % 10 == 1:
         torch.save(model.state_dict(), args.save_dir + args.save_name + ".pth")
         with open(args.save_dir + args.save_name + ".pkl", "wb") as f:
             pickle.dump({
@@ -165,9 +138,10 @@ for epoch in tqdm(range(args.epochs)):
                 "val_top5": val_top5_accs,
             }, f)
 
-
     # Print
-    print("Epoch: {}, Train Loss: {:.4f}, Train Acc: {:.4f}, Train top5: {:.4f}, Val Acc: {:.4f}, Val top5: {:.4f}".format(epoch, train_losses[-1], train_accs[-1], train_top5_accs[-1], val_accs[-1], val_top5_accs[-1]))
+    print(
+        "Epoch: {}, Train Loss: {:.4f}, Train Acc: {:.4f}, Train top5: {:.4f}, Val Acc: {:.4f}, Val top5: {:.4f}".format(
+            epoch, train_losses[-1], train_accs[-1], train_top5_accs[-1], val_accs[-1], val_top5_accs[-1]))
 
     # Scheduler
     if args.use_scheduler and epoch + 1 % 2 == 0:
@@ -179,14 +153,12 @@ for epoch in tqdm(range(args.epochs)):
         old_lts["wd"] = wd()
         opt = SGD(model.parameters(), lr=lr(), momentum=0.9, weight_decay=wd())
         # scheduler = lr_scheduler.MultiStepLR(opt, milestones=[50, 100, 150, 200], gamma=0.5)
-        
 
 torch.save(model.state_dict(), args.save_dir + args.save_name + ".pth")
 with open(args.save_dir + args.save_name + ".pkl", "wb") as f:
     pickle.dump({
         "train_losses": train_losses,
         "train_accs": train_accs,
-        # "val_losses": val_losses,
         "val_accs": val_accs,
         "train_top5": train_top5_accs,
         "val_top5": val_top5_accs,

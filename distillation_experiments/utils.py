@@ -244,7 +244,7 @@ def get_collapsible_model(model, fraction=1.0, device=None):
         if isinstance(module, timm.layers.Mlp):
             print("Collapsing layer {}".format(name))
             collapsibleMLP = CollapsibleMlp(module.fc1.in_features, module.fc2.in_features, module.fc2.out_features, act_layer=module.act, batch_norm=False, bias=module.fc2.bias, drop=module.drop2.p, use_conv=False)
-            collapsibleMLP.load_from_Mlp(module)
+            collapsibleMLP.load_from_mlp(module)
             if device is not None:
                 collapsibleMLP.to(device)
             change_module(copy_model, name, collapsibleMLP)

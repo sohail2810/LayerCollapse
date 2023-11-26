@@ -3,13 +3,12 @@
 Hacked together by / Copyright 2020 Ross Wightman
 Changed by Zibakhsh Shabgahi to add the collapsible MLP
 """
-from functools import partial
 
-import torch
-from torch import nn as nn
-
-from itertools import repeat
 import collections.abc
+import torch
+from functools import partial
+from itertools import repeat
+from torch import nn as nn
 
 
 # From PyTorch internals
@@ -18,7 +17,9 @@ def _ntuple(n):
         if isinstance(x, collections.abc.Iterable) and not isinstance(x, str):
             return tuple(x)
         return tuple(repeat(x, n))
+
     return parse
+
 
 to_2tuple = _ntuple(2)
 
@@ -26,6 +27,7 @@ to_2tuple = _ntuple(2)
 class CollapsibleMlp(nn.Module):
     """ MLP as used in Vision Transformer, MLP-Mixer and related networks
     """
+
     def __init__(
             self,
             in_features,
@@ -52,7 +54,6 @@ class CollapsibleMlp(nn.Module):
         self.drop2 = nn.Dropout(drop_probs[1])
         self.batch_norm = batch_norm
 
-
     def forward(self, x):
         x = self.fc1(x)
         x = self.act(x)
@@ -61,12 +62,12 @@ class CollapsibleMlp(nn.Module):
         x = self.fc2(x)
         x = self.drop2(x)
         return x
-    
+
     def linear_loss(self):
         if isinstance(self.act, nn.Identity):
             return 0
-        return (self.act.weight - 1)**2
-    
+        return (self.act.weight - 1) ** 2
+
     def collapse(self, threshold=0.05):
         if isinstance(self.act, nn.Identity):
             return
@@ -110,10 +111,10 @@ class CollapsibleMlp(nn.Module):
         else:
             print("Not collapsible")
 
-    def load_from_Mlp(self, module):
+    def load_from_mlp(self, module):
         self.fc1.weight.data = module.fc1.weight.data
         self.fc1.bias.data = module.fc1.bias.data
         self.fc2.weight.data = module.fc2.weight.data
         self.fc2.bias.data = module.fc2.bias.data
-    
+
 
