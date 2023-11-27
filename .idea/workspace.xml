@@ -3,15 +3,6 @@
   <component name="ChangeListManager">
     <list default="true" id="24178798-217d-4110-a6ab-ff08b3a3218d" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/distillation_experiments/.ipynb_checkpoints/Distill VGG-checkpoint.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/distillation_experiments/.ipynb_checkpoints/Distill VGG-checkpoint.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/distillation_experiments/Distill VGG.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/distillation_experiments/Distill VGG.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/distillation_experiments/utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/distillation_experiments/utils.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/mixer.ipynb" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/plot_cifar100.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/plot_cifar100.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/plot_tinyimagenet.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/plot_tinyimagenet.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/vgg.ipynb" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/vit2.ipynb" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
