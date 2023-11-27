@@ -1,31 +1,17 @@
 import copy
+import LiveTune as lt
 import time
 import torch
 import torch.nn as nn
-import torchvision.models as models
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from torch.optim.optimizer import Optimizer
-from torch.optim.lr_scheduler import LambdaLR
-
-from torchvision.datasets import *
-from torchvision.transforms import *
 import torchvision.models as models
 import timm
-
+from collapsible_mlp import CollapsibleMlp
+from torchvision.datasets import *
+from torchvision.transforms import *
 from torchprofile import profile_macs
-import numpy as np
 
-# # import Subset function of torchvision
-# from torchvision.datasets.utils import 
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
-import os
-import torch.multiprocessing as mp
-
-from collapsible_MLP import CollapsibleMlp
-
-import LiveTune as lt
 
 DEFAULT_CROP_PCT = 0.875
 DEFAULT_CROP_MODE = 'center'
@@ -53,7 +39,8 @@ def eval(
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             running_loss += loss.item()
-    return running_loss/len(dataloader)
+    return running_loss / len(dataloader)
+
 
 def eval_top5(
         model: nn.Module,
@@ -72,7 +59,8 @@ def eval_top5(
             _, predicted = outputs.topk(5, 1, True, True)
             top5_acc += (predicted == labels.view(-1, 1)).sum().item()
             running_loss += loss.item()
-    return top5_acc/len(dataloader.dataset)
+    return top5_acc / len(dataloader.dataset)
+
 
 def train(
         model: nn.Module,
@@ -100,30 +88,30 @@ def train(
 
             running_loss += loss.item()
 
-        train_losses.append(running_loss/len(dataloader["train"]))
+        train_losses.append(running_loss / len(dataloader["train"]))
         val_losses.append(eval(model, dataloader["val"], criterion, device))
-        print(f"Epoch {epoch+1}/{epochs} | Train loss: {train_losses[-1]} | Val loss: {val_losses[-1]}")
-        
+        print(f"Epoch {epoch + 1}/{epochs} | Train loss: {train_losses[-1]} | Val loss: {val_losses[-1]}")
+
         if old_lr != lr():
             optimizer = torch.optim.SGD(model.parameters(), lr=lr())
             old_lr = lr()
-            
+
     return train_losses, val_losses
 
 
 @torch.inference_mode()
 def evaluate(
-  model: nn.Module,
-  dataloader: DataLoader, 
-  verbose=True,
-  device=None,
+        model: nn.Module,
+        dataloader: DataLoader,
+        verbose=True,
+        device=None,
 ) -> float:
     model.eval()
 
     num_samples = 0
     num_correct = 0
 
-    for inputs, targets in tqdm(dataloader, desc="eval", leave=False, 
+    for inputs, targets in tqdm(dataloader, desc="eval", leave=False,
                                 disable=not verbose):
         # Move the data from CPU to GPU
         if device is None:
@@ -144,7 +132,6 @@ def evaluate(
         num_correct += (outputs == targets).sum()
 
     return (num_correct / num_samples * 100).item()
-
 
 
 def get_model_macs(model, inputs) -> int:
@@ -193,16 +180,23 @@ def get_model_size(model: nn.Module, data_width=32, count_nonzero_only=False) ->
     """
     return get_num_parameters(model, count_nonzero_only) * data_width
 
-def get_model(model_name, num_classes=10, drop_rate=0.1, image_size=32, patch_size=4, num_layers=6, hidden_dim=512, num_heads=8, mlp_dim=2048, dropout=0.1):
+
+def get_model(model_name, num_classes=10, drop_rate=0.1, image_size=32, patch_size=4, num_layers=6, hidden_dim=512,
+              num_heads=8, mlp_dim=2048, dropout=0.1):
     if model_name == "VGG16":
         return VGG16(num_classes=num_classes)
     elif model_name == "ViT":
-        return models.VisionTransformer(image_size=image_size, patch_size=4, num_layers=6, num_classes=num_classes, hidden_dim=512, num_heads=8, mlp_dim=2048, dropout=0.1)
+        return models.VisionTransformer(image_size=image_size, patch_size=4, num_layers=6, num_classes=num_classes,
+                                        hidden_dim=512, num_heads=8, mlp_dim=2048, dropout=0.1)
     elif model_name == "mixer":
-        return timm.models.mlp_mixer.MlpMixer(num_classes=num_classes, patch_size=patch_size, img_size=image_size, drop_rate=0.1, mlp_layer=CollapsibleMlp)
+        return timm.models.mlp_mixer.MlpMixer(num_classes=num_classes, patch_size=patch_size, img_size=image_size,
+                                              drop_rate=0.1, mlp_layer=CollapsibleMlp)
     elif model_name == "timm_vit":
-        return timm.models.vision_transformer.VisionTransformer(num_classes=num_classes, patch_size=patch_size, img_size=image_size, drop_rate=0.1, mlp_layer=CollapsibleMlp, depth=num_layers)
+        return timm.models.vision_transformer.VisionTransformer(num_classes=num_classes, patch_size=patch_size,
+                                                                img_size=image_size, drop_rate=0.1,
+                                                                mlp_layer=CollapsibleMlp, depth=num_layers)
     return models.__dict__[model_name]()
+
 
 def get_model_linear_loss(model, fraction=1.0):
     linear_loss = 0
@@ -211,6 +205,7 @@ def get_model_linear_loss(model, fraction=1.0):
         if isinstance(module, CollapsibleMlp):
             linear_loss += module.linear_loss()
     return linear_loss
+
 
 def get_model_collapsible_slopes(model, fraction=1.0):
     num_mlp_layers = len(list(model.named_modules()))
@@ -221,13 +216,14 @@ def get_model_collapsible_slopes(model, fraction=1.0):
             else:
                 print(name, module.act.weight.item())
 
+
 def collapse_model(model, fraction=1.0, threshold=0.05, device=None):
     num_mlp_layers = len(list(model.named_modules()))
     for name, module in list(model.named_modules())[::-1][:int(num_mlp_layers * fraction)]:
         if isinstance(module, CollapsibleMlp):
             print("Collapsing layer {}".format(name))
             module.collapse(threshold=threshold)
-            
+
 
 def change_module(model, name, module):
     name_list = name.split(".")
@@ -243,7 +239,9 @@ def get_collapsible_model(model, fraction=1.0, device=None):
     for name, module in list(copy_model.named_modules())[::-1][:int(num_mlp_layers * fraction)]:
         if isinstance(module, timm.layers.Mlp):
             print("Collapsing layer {}".format(name))
-            collapsibleMLP = CollapsibleMlp(module.fc1.in_features, module.fc2.in_features, module.fc2.out_features, act_layer=module.act, batch_norm=False, bias=module.fc2.bias, drop=module.drop2.p, use_conv=False)
+            collapsibleMLP = CollapsibleMlp(module.fc1.in_features, module.fc2.in_features, module.fc2.out_features,
+                                            act_layer=module.act, batch_norm=False, bias=module.fc2.bias,
+                                            drop=module.drop2.p, use_conv=False)
             collapsibleMLP.load_from_mlp(module)
             if device is not None:
                 collapsibleMLP.to(device)
@@ -256,6 +254,7 @@ KiB = 1024 * Byte
 MiB = 1024 * KiB
 GiB = 1024 * MiB
 
+
 def evaluate_model(model, dataloader, count_nonzero_only=False, device=None):
     model_test_accuracy = evaluate(model, dataloader['val'], device=device)
     # model_train_accuracy = evaluate(model, dataloader['train'], device=device)
@@ -267,8 +266,8 @@ def evaluate_model(model, dataloader, count_nonzero_only=False, device=None):
     print(f"model has test accuracy={model_test_accuracy:.2f}%")
     print(f"model has top5 accuracy={top5:.2f}%")
     # print(f"model has train accuracy={model_train_accuracy:.2f}%")
-    print(f"model has size={model_size/MiB:.2f} MiB")
-    print(f"model has macs={model_macs/1e9:.2f} Gmacs")
+    print(f"model has size={model_size / MiB:.2f} MiB")
+    print(f"model has macs={model_macs / 1e9:.2f} Gmacs")
     average_time = 0
     with torch.no_grad():
         for i in range(1000):
@@ -277,14 +276,13 @@ def evaluate_model(model, dataloader, count_nonzero_only=False, device=None):
             end = time.time()
             average_time += (end - start)
 
-    print(f"average inference time is {average_time/1000:.4f} seconds")
+    print(f"average inference time is {average_time / 1000:.4f} seconds")
     # pytorch_total_params = sum(p.numel() for p in model.parameters())
-    print(f"model has {get_num_parameters(model, count_nonzero_only)/1e6:.2f} M parameters")
+    print(f"model has {get_num_parameters(model, count_nonzero_only) / 1e6:.2f} M parameters")
     model.train()
 
 
 def get_dataloader(dataset_name="cifar100", batch_size=512, num_workers=10):
-    
     if dataset_name == "imagenet":
         image_size = 224
         transforms = {
@@ -340,7 +338,7 @@ def get_dataloader(dataset_name="cifar100", batch_size=512, num_workers=10):
 
     dataset = {}
     for split in ["train", "val"]:
-       # get cifar100 dataset
+        # get cifar100 dataset
         if dataset_name == "cifar100":
             dataset[split] = CIFAR100(
                 root="data/cifar100",
@@ -374,6 +372,7 @@ def get_dataloader(dataset_name="cifar100", batch_size=512, num_workers=10):
 
     return dataloader
 
+
 class VGG16(nn.Module):
     def __init__(self, num_classes=10):
         super(VGG16, self).__init__()
@@ -384,10 +383,10 @@ class VGG16(nn.Module):
         self.layer2 = nn.Sequential(
             nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(64),
-            nn.ReLU(), 
-            nn.MaxPool2d(kernel_size = 2, stride = 2),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Dropout(0.2))
-        
+
         self.layer3 = nn.Sequential(
             nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(128),
@@ -396,9 +395,9 @@ class VGG16(nn.Module):
             nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(128),
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size = 2, stride = 2),
+            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Dropout(0.3))
-        
+
         self.layer5 = nn.Sequential(
             nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(256),
@@ -411,9 +410,9 @@ class VGG16(nn.Module):
             nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(256),
             nn.PReLU(num_parameters=1, init=0.1),
-            nn.MaxPool2d(kernel_size = 2, stride = 2),
+            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Dropout(0.4))
-        
+
         self.layer8 = nn.Sequential(
             nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(512),
@@ -426,9 +425,9 @@ class VGG16(nn.Module):
             nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(512),
             nn.PReLU(num_parameters=1, init=0.1),
-            nn.MaxPool2d(kernel_size = 2, stride = 2),
+            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Dropout(0.4))
-        
+
         self.layer11 = nn.Sequential(
             nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(512),
@@ -441,7 +440,7 @@ class VGG16(nn.Module):
             nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(512),
             nn.PReLU(num_parameters=1, init=0.1),
-            nn.MaxPool2d(kernel_size = 2, stride = 2),
+            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Dropout(0.5))
         self.fc = nn.Sequential(
             # nn.Linear(7*7*512, 4096),
@@ -453,13 +452,13 @@ class VGG16(nn.Module):
             nn.BatchNorm1d(4096),
             nn.PReLU(num_parameters=1, init=0.1),
             nn.Dropout(0.5))
-        self.fc2= nn.Sequential(
+        self.fc2 = nn.Sequential(
             nn.Linear(4096, num_classes))
         # self.fc_small = nn.Sequential(
         #     nn.Dropout(0.5),
         #     # nn.Linear(7*7*512, num_classes))
         #     nn.Linear(512, num_classes))
-        
+
     def forward(self, x):
         out = self.layer1(x)
         out = self.layer2(out)
@@ -480,7 +479,7 @@ class VGG16(nn.Module):
         out = self.fc2(out)
         # out = self.fc_small(out)
         return out
-    
+
 
 def get_lc_loss(model, lc1, lc2):
     if isinstance(model, VGG16):
@@ -489,15 +488,16 @@ def get_lc_loss(model, lc1, lc2):
         print(slope1)
         print(slope2)
         return lc1 * (slope1 - 1) ** 2 + lc2 * (slope2 - 1) ** 2
-    else :
+    else:
         raise NotImplementedError
-    
+
+
 def finetune(model, dataloader, lc, fraction, lr, epochs=1, device=None, verbose=None):
     criterion = nn.CrossEntropyLoss()
     opt = torch.optim.SGD(model.parameters(), momentum=0.9, lr=lr)
     # opt = torch.optim.Adam(model.parameters(), lr=lr)
     for epoch in tqdm(range(epochs)):
-    # Train
+        # Train
         model.train()
         train_loss = 0.0
         train_acc = 0.0
@@ -525,17 +525,19 @@ def finetune(model, dataloader, lc, fraction, lr, epochs=1, device=None, verbose
         train_loss /= len(dataloader["train"])
         train_acc /= len(dataloader["train"].dataset)
         train_top5_acc /= len(dataloader["train"].dataset)
-        
+
         val_acc = evaluate(model, dataloader=dataloader['val'], device=device)
-        
 
         # Print
-        print("Epoch: {}, Train Loss: {:.4f}, Train Acc: {:.4f}, Train top5: {:.4f}, Val Acc: {:.4f}".format(epoch, train_loss, train_acc, train_top5_acc, val_acc))
+        print("Epoch: {}, Train Loss: {:.4f}, Train Acc: {:.4f}, Train top5: {:.4f}, Val Acc: {:.4f}".format(epoch,
+                                                                                                             train_loss,
+                                                                                                             train_acc,
+                                                                                                             train_top5_acc,
+                                                                                                             val_acc))
         if lc != 0:
             get_model_collapsible_slopes(model, fraction=fraction)
 
 
-    
 cfg = {
     'VGG11': [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
     'VGG13': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
@@ -612,7 +614,7 @@ class VGG(nn.Module):
 #     model.train()
 #     # Create a distributed sampler
 #     # sampler = torch.utils.data.distributed.DistributedSampler(dataloader)
-    
+
 #     # # Create a new dataloader with the distributed sampler
 #     # dataloader = DataLoader(dataloader.dataset, sampler=sampler, batch_size=dataloader.batch_size)
 
@@ -662,7 +664,7 @@ class VGG(nn.Module):
 #     model.train()
 #     # Create a distributed sampler
 #     # sampler = torch.utils.data.distributed.DistributedSampler(dataloader)
-    
+
 #     # # # Create a new dataloader with the distributed sampler
 #     # dataloader = DataLoader(dataloader.dataset, sampler=sampler, batch_size=dataloader.batch_size)
 
@@ -688,7 +690,6 @@ class VGG(nn.Module):
 #         if callbacks is not None:
 #             for callback in callbacks:
 #                 callback()
-
 
 
 # @torch.inference_mode()
@@ -885,22 +886,21 @@ class VGG(nn.Module):
 # def random_rgb_color_shift(image):
 #     # Convert the image to a NumPy array
 #     image_np = np.array(image)
-    
+
 #     # Generate random values for the color shift in each channel
 #     r_shift = np.random.randint(-50, 51)  # Adjust the range as needed
 #     g_shift = np.random.randint(-50, 51)
 #     b_shift = np.random.randint(-50, 51)
-    
+
 #     # Apply the color shift to each channel
 #     image_np[:,:,0] = np.clip(image_np[:,:,0] + r_shift, 0, 255)
 #     image_np[:,:,1] = np.clip(image_np[:,:,1] + g_shift, 0, 255)
 #     image_np[:,:,2] = np.clip(image_np[:,:,2] + b_shift, 0, 255)
-    
+
 #     # Convert the NumPy array back to a PIL Image
 #     image = Image.fromarray(np.uint8(image_np))
-    
-#     return image
 
+#     return image
 
 
 # def get_dataloader(dataset_name="cifar100", batch_size=512, num_workers=4):
@@ -1057,4 +1057,3 @@ class VGG(nn.Module):
 #     model.classifier._modules[str(relu_id)] = nn.Identity()
 #     model.classifier._modules[str(relu_id + 1)] = nn.Identity()
 #     return model
-    
