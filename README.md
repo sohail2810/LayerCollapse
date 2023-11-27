@@ -45,3 +45,11 @@ Before running the code in this repository, ensure that you have installed the r
 4. **vit_final.ipynb:**
    - Conducts sensitivity analysis on a ViT Tiny model by gradually collapsing different fractions of its layers.
    - Evaluates the performance of each step and the final collapsed model on the ImageNet dataset.
+
+5. **plot_cifar100.ipynb:**
+   - Plots the training and validation accuracies of various VGG models on the CIFAR-100 dataset. 
+   - The models include both vanilla versions and versions with a layer collapsing (LC) technique applied.
+
+6. **plot_tinyimagenet.ipynb**
+   - Experiment to visually compare the training and validation performance of VGG models with and without LayerCollapse compression across different VGG variants on a tiny part of the Imagenet dataset. 
+   - The results suggest that LayerCollapse achieves significant model compression with minimal accuracy loss.
