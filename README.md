@@ -34,22 +34,26 @@ Before running the code in this repository, ensure that you have installed the r
 1. **distillation_experiments:**
    - Implementation of knowledge distillation, a technique where a smaller student model is trained to mimic the behavior of a larger teacher model, enhancing the student's performance.
 
-2. **mixer_final.ipynb:**
+2. **nlp_experiments:**
+   - Involves loading pretrained NLP models (BERT, GPT2).
+   - Creates collapsible versions of these models, loads different states, and evaluates the performance of both the original and collapsible models.
+
+3. **mixer_final.ipynb:**
    - Involves loading, evaluating, and modifying Mixer models on the ImageNet dataset.
    - Demonstrates the creation of a collapsible version of a Mixer model, loading different states, modifying the collapsible model's architecture, and evaluating performance.
 
-3. **vgg_final.ipynb:**
+4. **vgg_final.ipynb:**
    - Involves loading pretrained VGG models (VGG11, VGG13, VGG16, VGG19) from torchvision.
    - Creates collapsible versions of these models, loads different states, and evaluates the performance of both the original and collapsible models on the ImageNet dataset.
 
-4. **vit_final.ipynb:**
+5. **vit_final.ipynb:**
    - Conducts sensitivity analysis on a ViT Tiny model by gradually collapsing different fractions of its layers.
    - Evaluates the performance of each step and the final collapsed model on the ImageNet dataset.
 
-5. **plot_cifar100.ipynb:**
+6. **plot_cifar100.ipynb:**
    - Plots the training and validation accuracies of various VGG models on the CIFAR-100 dataset. 
    - The models include both vanilla versions and versions with a layer collapsing (LC) technique applied.
 
-6. **plot_tinyimagenet.ipynb**
+7. **plot_tinyimagenet.ipynb**
    - Experiment to visually compare the training and validation performance of VGG models with and without LayerCollapse compression across different VGG variants on a tiny part of the Imagenet dataset. 
    - The results suggest that LayerCollapse achieves significant model compression with minimal accuracy loss.
